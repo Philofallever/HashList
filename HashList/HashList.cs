@@ -12,7 +12,6 @@ public interface IHashList<TKey, TValue> : IList<TValue>, IReadOnlyList<TValue>
     // TValue FindByHash(Tkey key);
 }
 
-
 /// <summary>
 /// 和<see cref="List{T}"/>一样的顺序列表,但是可以通过添加索引器来加快查找(O(n) -> O(1)). 
 /// 支持多个不同类型主键的索引器 
@@ -21,73 +20,37 @@ public interface IHashList<TKey, TValue> : IList<TValue>, IReadOnlyList<TValue>
 public sealed class HashList<TKey, TValue> : IHashList<TKey, TValue>
 {
     private readonly List<TValue> _list;  // 容器
-    private readonly List<IHashListIndexer<TValue>> _indexers; // 索引器
+    private readonly HashListIndexer<TValue, TKey> _indexer; // 索引器
 
     #region 构造函数
-    public HashList()
+    public HashList(Func<TValue, TKey> keySelector)
     {
-        _list = new List<TValue>();
-        _indexers = new List<IHashListIndexer<TValue>>(1);
+        _list = new List<TValue>();        
+        _indexer = new HashListIndexer<TValue, TKey>(_list, keySelector);    
     }
 
-    public HashList(int capacity)
+    public HashList(int capacity, Func<TValue, TKey> keySelector)
     {
         _list = new List<TValue>(capacity);
-        _indexers = new List<IHashListIndexer<TValue>>(1);
+        _indexer = new HashListIndexer<TValue, TKey>(_list, keySelector);
     }
 
-    public HashList(IEnumerable<TValue> collection)
+    public HashList(IEnumerable<TValue> collection, Func<TValue, TKey> keySelector)
     {
         _list = new List<TValue>(collection);
-        _indexers = new List<IHashListIndexer<TValue>>(1);
+        _indexer = new HashListIndexer<TValue, TKey>(_list, keySelector);
     }
 
     #endregion
 
-
     #region 索引实现
-
-    /// <summary>
-    /// 创建索引器
-    /// </summary>
-    /// <typeparam name="TKey"></typeparam>
-    /// <param name="keySelector"></param>
-    /// <exception cref="ArgumentException"></exception>
-    public void CreateIndexer<TKey>(Func<TValue, TKey> keySelector)
-    {
-        foreach (var indexer in _indexers)
-        {
-            if (indexer is HashListIndexer<TValue, TKey>)
-            {
-                throw new ArgumentException($"Indexer of {typeof(TKey)} already exists.");
-            }
-        }
-        // keySelector.Method.re
-
-        var newIndexer = new HashListIndexer<TValue, TKey>(_list, keySelector);
-        _indexers.Add(newIndexer);
-    }
-
-    public void RemoveIndexer<TKey>()
-    {
-        for (int i = 0; i < _indexers.Count; i++)
-        {
-            if (_indexers[i] is HashListIndexer<TValue, TKey>)
-            {
-                _indexers.RemoveAt(i);
-                return;
-            }
-        }
-    }
 
     public void ClearIndexer()
     {
-        _indexers.ForEach(static x => x.Clear());
-        _indexers.Clear();
+        _indexer.Clear();
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool HasIndexer() => _indexers.Count != 0;
+    public bool HasIndexer() => _indexer != null;
 
     #endregion
 
@@ -115,12 +78,10 @@ public sealed class HashList<TKey, TValue> : IHashList<TKey, TValue>
         set
         {
             var oldItem = _list[index];
-            foreach (var indexer in _indexers)
-                indexer.Remove(oldItem);
+            _indexer.Remove(oldItem);
 
             _list[index] = value;
-            foreach (var indexer in _indexers)
-                indexer.Add(value);
+            _indexer.Add(value);
         }
     }
 
@@ -135,12 +96,8 @@ public sealed class HashList<TKey, TValue> : IHashList<TKey, TValue>
     public void Add(TValue item)
     {
         _list.Add(item);
-        foreach (var indexer in _indexers)
-            indexer.Add(item);
+        _indexer.Add(item);
     }
-
-
-
 
     public int IndexOf(TValue item)
     {
@@ -150,35 +107,40 @@ public sealed class HashList<TKey, TValue> : IHashList<TKey, TValue>
     public void Insert(int index, TValue item)
     {
         _list.Insert(index, item);
-        foreach (var indexer in _indexers)
-            indexer.Add(item);
+        _indexer.Add(item);
     }
 
     public void RemoveAt(int index)
     {
         var item = _list[index];
         _list.RemoveAt(index);
-        _indexers.ForEach(x => x.Remove(item));
+        _indexer.Remove(item);
     }
 
     public void Clear()
     {
-        throw new NotImplementedException();
+        _list.Clear();
+        _indexer.Clear();
     }
 
     public bool Contains(TValue item)
     {
-        throw new NotImplementedException();
+        return _list.Contains(item);
     }
 
     public void CopyTo(TValue[] array, int arrayIndex)
     {
-        throw new NotImplementedException();
+        _list.CopyTo(array, arrayIndex);
     }
 
     public bool Remove(TValue item)
     {
-        throw new NotImplementedException();
+        if (_list.Remove(item))
+        {
+            _indexer.Remove(item);
+            return true;
+        }
+        return false;
     }
 
     public bool IsReadOnly => false;

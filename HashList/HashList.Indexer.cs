@@ -20,9 +20,9 @@ public sealed class HashListIndexer<TElement, TKey> : IHashListIndexer<TElement>
 {
     private readonly Func<TElement, TKey> _keySelector;
     private readonly Dictionary<TKey, TElement> _indexer;
-    private readonly List<TElement> _list;
+    private readonly IList<TElement> _list;
 
-    public HashListIndexer(List<TElement> list, Func<TElement, TKey> keySelector)
+    public HashListIndexer(IList<TElement> list, Func<TElement, TKey> keySelector)
     {
         if (list == null) throw new ArgumentNullException(nameof(list));
         if (keySelector == null) throw new ArgumentNullException(nameof(keySelector));
@@ -148,19 +148,31 @@ public sealed class HashListIndexer<TElement, TKey> : IHashListIndexer<TElement>
         if (count < 0) throw new IndexOutOfRangeException(nameof(count));
         if (_list.Count - index < count) throw new IndexOutOfRangeException($"Remove index count out of range index:{index} count:{count}");
 
-        for (int i = index + count - 1; i >= index; i--)
+        if (_list is List<TElement> list)
         {
-            var element = _list[i];
-            _indexer.Remove(_keySelector(element));
+            for (int i = index; i < index + count; i++)
+            {
+                var element = _list[i];
+                _indexer.Remove(_keySelector(element));
+            }
+            list.RemoveRange(index, count);
         }
-        _list.RemoveRange(index, count);
+        else
+        {
+            for (int i = index; i < index + count; i++)
+            {
+                var element = _list[i];
+                _list.RemoveAt(i);
+                _indexer.Remove(_keySelector(element));
+            }
+        }
     }
 
     public void RemoveAll(Predicate<TElement> match)
     {
         if (match == null) throw new ArgumentNullException(nameof(match));
 
-        for (int i = _list.Count - 1; i >= 0; i--)
+        for (int i = 0; i < _list.Count; i++)
         {
             var element = _list[i];
             if (match(element))
